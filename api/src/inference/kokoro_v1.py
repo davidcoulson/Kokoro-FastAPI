@@ -1,6 +1,8 @@
 """Clean Kokoro implementation with controlled resource management."""
 
+import asyncio
 import os
+import threading
 from collections import OrderedDict
 from typing import AsyncGenerator, Dict, Optional, Tuple, Union
 
@@ -117,6 +119,19 @@ class KokoroV1(BaseModelBackend):
         self._voice_cache: OrderedDict[str, torch.Tensor] = (
             OrderedDict()
         )  # LRU of voice tensors by path
+        self._inference_lock = threading.Lock()  # one model call at a time
+
+    def _next_locked(self, results, done):
+        with self._inference_lock:
+            return next(results, done)
+
+    async def _iterate_off_loop(self, results):
+        """Step a pipeline generator in a worker thread so the event loop keeps serving."""
+        done = object()
+        while (
+            result := await asyncio.to_thread(self._next_locked, results, done)
+        ) is not done:
+            yield result
 
     async def _get_voice_tensor(self, voice_path: str) -> torch.Tensor:
         """Load voice tensor with in-memory caching to avoid repeated file I/O.
@@ -279,8 +294,10 @@ class KokoroV1(BaseModelBackend):
             logger.debug(
                 f"Generating audio from tokens with lang_code '{pipeline_lang_code}': '{tokens[:100]}{'...' if len(tokens) > 100 else ''}'"
             )
-            for result in pipeline.generate_from_tokens(
-                tokens=tokens, voice=voice_pack, speed=speed, model=self._model
+            async for result in self._iterate_off_loop(
+                pipeline.generate_from_tokens(
+                    tokens=tokens, voice=voice_pack, speed=speed, model=self._model
+                )
             ):
                 if result.audio is not None:
                     logger.debug(f"Got audio chunk with shape: {result.audio.shape}")
@@ -379,8 +396,8 @@ class KokoroV1(BaseModelBackend):
             logger.debug(
                 f"Generating audio for text with lang_code '{pipeline_lang_code}': '{text[:100]}{'...' if len(text) > 100 else ''}'"
             )
-            for result in pipeline(
-                text, voice=voice_pack, speed=speed, model=self._model
+            async for result in self._iterate_off_loop(
+                pipeline(text, voice=voice_pack, speed=speed, model=self._model)
             ):
                 if result.audio is not None:
                     logger.debug(f"Got audio chunk with shape: {result.audio.shape}")
