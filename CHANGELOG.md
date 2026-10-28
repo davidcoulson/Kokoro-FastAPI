@@ -11,6 +11,11 @@ Per-PR attribution and contributor credits are published automatically on the co
 - `/dev/generate_from_phonemes` checks its voice like `/v1/audio/speech` does, returning 400 for an unknown voice. It used to pass the voice straight to the mixer, where a file path as the voice could write a mixed voice pack into the voices directory
 - Voice mixes no longer leave files in the temp directory and memory on every distinct combination. Mixed packs are kept under `kokoro_voice_mixes/` in the temp dir, capped at the 64 most recent, voice tensors are cached for the 64 most recently used voices, and the per-voice `temp_voice_*.pt` copies are gone
 - The server stays responsive while it generates speech: `/health`, voice listings and other requests are answered between model calls instead of waiting for a long generation to finish. Generation itself still runs one model call at a time
+### Added
+- `MAX_REQUEST_BODY_MB` (default 32): request bodies over it get a 413 as soon as they pass the limit, instead of being read in full before validation
+
+### Fixed
+- `/dev/phonemize`, `/dev/generate_from_phonemes` and `/dev/ssml` now respect `MAX_INPUT_LENGTH` like the speech endpoints
 
 ## [v0.9.1] - 2026-10-28: Security Bumps, IME & MPS Fixes
 
