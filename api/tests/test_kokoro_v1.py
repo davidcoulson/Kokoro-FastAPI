@@ -1,5 +1,3 @@
-import tempfile
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import ANY, MagicMock, patch
 
@@ -147,6 +145,16 @@ async def test_oom_after_audio_is_not_retried(kokoro_backend):
     mock_clear.assert_not_called()
 
 
+async def test_voice_cache_evicts_least_recently_used(kokoro_backend, monkeypatch):
+    monkeypatch.setattr("api.src.inference.kokoro_v1.VOICE_CACHE_SIZE", 2)
+    with patch("api.src.core.paths.load_voice_tensor", return_value=torch.ones(1)):
+        await kokoro_backend._get_voice_tensor("a.pt")
+        await kokoro_backend._get_voice_tensor("b.pt")
+        await kokoro_backend._get_voice_tensor("a.pt")
+        await kokoro_backend._get_voice_tensor("c.pt")
+    assert [k.split(":")[0] for k in kokoro_backend._voice_cache] == ["a.pt", "c.pt"]
+
+
 @patch("torch.cuda.empty_cache")
 @patch("torch.cuda.synchronize")
 def test_clear_memory(mock_sync, mock_clear, kokoro_backend):
@@ -264,11 +272,9 @@ async def test_generate_uses_correct_pipeline(kokoro_backend):
                 speed=1.0,
                 model=kokoro_backend._model,
             )
-            # Voice was staged to a temp file with the expected basename in
-            # the OS temp dir (cross-platform: don't string-match separators).
-            voice_arg = Path(mock_pipeline.call_args[1]["voice"])
-            assert voice_arg.name == "temp_voice_ef_voice"
-            assert voice_arg.parent == Path(tempfile.gettempdir())
+            # The cached tensor goes to the pipeline directly, so nothing is
+            # staged in the temp dir or kept in pipeline.voices
+            assert torch.equal(mock_pipeline.call_args[1]["voice"], torch.ones(1))
 
 
 @pytest.mark.asyncio
