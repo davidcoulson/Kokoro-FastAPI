@@ -5,19 +5,17 @@ Notable changes to this project will be documented in this file.
 Per-PR attribution and contributor credits are published automatically on the corresponding GitHub release page; this file is the curated, human-readable summary.
 
 ## [Unreleased]
+### Added
+- `MAX_REQUEST_BODY_MB` (default 32): request bodies over it get a 413 as soon as they pass the limit, instead of being read in full before validation
+- `API_KEYS`: set a JSON list of keys and the API routes require `Authorization: Bearer <key>`, as OpenAI clients send it. `/health` and the web player's files stay open. Off by default (#373)
+
 ### Fixed
 - CUDA out-of-memory during generation is retried once and then reported, instead of retrying the same request without limit; a retry no longer repeats audio already sent or drops word timestamps
 - Saved downloads now expire `max_temp_dir_age_hours` after they were written. Age used to be counted up to the previous download rather than the current time, so after a quiet spell older files were kept
 - `/dev/generate_from_phonemes` checks its voice like `/v1/audio/speech` does, returning 400 for an unknown voice. It used to pass the voice straight to the mixer, where a file path as the voice could write a mixed voice pack into the voices directory
 - Voice mixes no longer leave files in the temp directory and memory on every distinct combination. Mixed packs are kept under `kokoro_voice_mixes/` in the temp dir, capped at the 64 most recent, voice tensors are cached for the 64 most recently used voices, and the per-voice `temp_voice_*.pt` copies are gone
 - The server stays responsive while it generates speech: `/health`, voice listings and other requests are answered between model calls instead of waiting for a long generation to finish. Generation itself still runs one model call at a time
-### Added
-- `MAX_REQUEST_BODY_MB` (default 32): request bodies over it get a 413 as soon as they pass the limit, instead of being read in full before validation
-
-### Fixed
 - `/dev/phonemize`, `/dev/generate_from_phonemes` and `/dev/ssml` now respect `MAX_INPUT_LENGTH` like the speech endpoints
-### Added
-- `API_KEYS`: set a JSON list of keys and the API routes require `Authorization: Bearer <key>`, as OpenAI clients send it. `/health` and the web player's files stay open. Off by default (#373)
 
 ## [v0.9.1] - 2026-10-28: Security Bumps, IME & MPS Fixes
 
