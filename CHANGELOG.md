@@ -16,6 +16,8 @@ Per-PR attribution and contributor credits are published automatically on the co
 - Voice mixes no longer leave files in the temp directory and memory on every distinct combination. Mixed packs are kept under `kokoro_voice_mixes/` in the temp dir, capped at the 64 most recent, voice tensors are cached for the 64 most recently used voices, and the per-voice `temp_voice_*.pt` copies are gone
 - The server stays responsive while it generates speech: `/health`, voice listings and other requests are answered between model calls instead of waiting for a long generation to finish. Generation itself still runs one model call at a time
 - `/dev/phonemize`, `/dev/generate_from_phonemes` and `/dev/ssml` now respect `MAX_INPUT_LENGTH` like the speech endpoints
+### Fixed
+- `/dev/phonemize` returns the phonemes for all of the text. Input the pipeline splits into several segments, such as separate paragraphs, used to come back with only the first segment
 
 ## [v0.9.1] - 2026-10-28: Security Bumps, IME & MPS Fixes
 
