@@ -18,6 +18,8 @@ Per-PR attribution and contributor credits are published automatically on the co
 - `/dev/phonemize`, `/dev/generate_from_phonemes` and `/dev/ssml` now respect `MAX_INPUT_LENGTH` like the speech endpoints
 ### Fixed
 - `/dev/phonemize` returns the phonemes for all of the text. Input the pipeline splits into several segments, such as separate paragraphs, used to come back with only the first segment
+### Fixed
+- A `download_format` different from `response_format` is rejected with a 422. The download link served the streamed audio unchanged under the other format's name and type, so asking for mp3 with a wav download gave an mp3 file called `.wav`
 
 ## [v0.9.1] - 2026-10-28: Security Bumps, IME & MPS Fixes
 
