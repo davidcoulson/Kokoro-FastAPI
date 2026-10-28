@@ -7,6 +7,7 @@ Per-PR attribution and contributor credits are published automatically on the co
 ## [Unreleased]
 ### Fixed
 - CUDA out-of-memory during generation is retried once and then reported, instead of retrying the same request without limit; a retry no longer repeats audio already sent or drops word timestamps
+- Saved downloads now expire `max_temp_dir_age_hours` after they were written. Age used to be counted up to the previous download rather than the current time, so after a quiet spell older files were kept
 
 ## [v0.9.1] - 2026-10-28: Security Bumps, IME & MPS Fixes
 
