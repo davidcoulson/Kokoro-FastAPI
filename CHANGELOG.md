@@ -16,6 +16,8 @@ Per-PR attribution and contributor credits are published automatically on the co
 
 ### Fixed
 - `/dev/phonemize`, `/dev/generate_from_phonemes` and `/dev/ssml` now respect `MAX_INPUT_LENGTH` like the speech endpoints
+### Added
+- `API_KEYS`: set a JSON list of keys and the API routes require `Authorization: Bearer <key>`, as OpenAI clients send it. `/health` and the web player's files stay open. Off by default (#373)
 
 ## [v0.9.1] - 2026-10-28: Security Bumps, IME & MPS Fixes
 
