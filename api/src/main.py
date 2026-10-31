@@ -3,23 +3,24 @@ FastAPI OpenAI Compatible API
 """
 
 import asyncio
-import json
 import logging
 import os
-import secrets
 import sys
 from contextlib import asynccontextmanager
 
 import torch
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from loguru import logger
 
+from .core.auth import require_api_key
+from .core.body_limit import BodySizeLimitMiddleware
 from .core.config import settings, unrecognized_env_file_keys
+from .routers.cartesia_compatible import router as cartesia_router
 from .routers.debug import router as debug_router
 from .routers.development import router as dev_router
+from .routers.elevenlabs_compatible import router as elevenlabs_router
 from .routers.openai_compatible import router as openai_router
 from .routers.ssml import router as ssml_router
 from .routers.tune import router as tune_router
@@ -156,79 +157,6 @@ app = FastAPI(
 )
 
 
-class _BodyTooLarge(Exception):
-    pass
-
-
-class BodySizeLimitMiddleware:
-    """413 a request whose body passes MAX_REQUEST_BODY_MB, counted as it arrives."""
-
-    def __init__(self, app):
-        self.app = app
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            return await self.app(scope, receive, send)
-        limit = settings.max_request_body_mb * 1024 * 1024
-        declared = dict(scope["headers"]).get(b"content-length", b"")
-        if declared.isdigit() and int(declared) > limit:
-            return await self._reject(send, limit)
-
-        received = 0
-        over = False
-        started = False
-
-        async def counted_receive():
-            nonlocal received, over
-            message = await receive()
-            if message["type"] == "http.request":
-                received += len(message.get("body", b""))
-                if received > limit and not started:
-                    over = True
-                    raise _BodyTooLarge()
-            return message
-
-        # FastAPI turns a failed body read into its own 400, so swap in the 413
-        async def guarded_send(message):
-            nonlocal started
-            if over:
-                if message["type"] == "http.response.start" and not started:
-                    started = True
-                    await self._reject(send, limit)
-                return
-            started = started or message["type"] == "http.response.start"
-            await send(message)
-
-        try:
-            await self.app(scope, counted_receive, guarded_send)
-        except _BodyTooLarge:
-            if not started:
-                await self._reject(send, limit)
-
-    @staticmethod
-    async def _reject(send, limit):
-        body = json.dumps(
-            {
-                "detail": {
-                    "error": "too_large",
-                    "message": f"request body exceeds {limit >> 20} MB",
-                }
-            }
-        ).encode()
-        await send(
-            {
-                "type": "http.response.start",
-                "status": 413,
-                "headers": [
-                    (b"content-type", b"application/json"),
-                    (b"content-length", str(len(body)).encode()),
-                    (b"connection", b"close"),
-                ],
-            }
-        )
-        await send({"type": "http.response.body", "body": body})
-
-
 app.add_middleware(BodySizeLimitMiddleware)
 
 # Add CORS middleware if enabled
@@ -241,31 +169,8 @@ if settings.cors_enabled:
         allow_headers=["*"],
     )
 
+
 # Include routers
-_bearer = HTTPBearer(auto_error=False)
-
-
-async def require_api_key(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-) -> None:
-    """401 unless API_KEYS is empty or the request carries one of them as a bearer token"""
-    if not settings.api_keys:
-        return
-    token = credentials.credentials.encode() if credentials else b""
-    if not any(
-        secrets.compare_digest(token, key.encode()) for key in settings.api_keys
-    ):
-        raise HTTPException(
-            status_code=401,
-            detail={
-                "error": "unauthorized",
-                "message": "A valid API key is required",
-                "type": "authentication_error",
-            },
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-
 protected = [Depends(require_api_key)]
 app.include_router(openai_router, prefix="/v1", dependencies=protected)
 app.include_router(dev_router, dependencies=protected)  # Development endpoints
@@ -276,6 +181,12 @@ app.include_router(tune_router, dependencies=protected)  # /dev/tune, 403 unless
 app.include_router(
     debug_router, dependencies=protected
 )  # Debug endpoints (403 unless enabled)
+app.include_router(
+    elevenlabs_router, dependencies=protected
+)  # ElevenLabs compatible websocket TTS
+app.include_router(
+    cartesia_router, dependencies=protected
+)  # Cartesia compatible websocket TTS
 if settings.enable_web_player:
     app.include_router(web_router, prefix="/web")  # Web player static files
 
